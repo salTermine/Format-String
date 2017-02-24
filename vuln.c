@@ -27,7 +27,8 @@ int wrauth(const char *username, int ulen, const char *pass, int plen) {
 void g(const char *username, int ulen, const char *pass, int plen) {
   char *s1 = "/bin/bash";
   char *s2 = "/bin/false";
-  int authd=0;
+  int authd = 0;
+
   if (RANDOM) 
      authd |= wrauth(username, ulen, pass, plen);
   else authd |= auth(username, ulen, pass, plen);
