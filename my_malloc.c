@@ -22,6 +22,8 @@ void heap_insert(heap_block* newblock)  {
    newblock->in_use = 0;
    newblock->prev = NULL;
    newblock->next = head;
+   if (head != NULL)
+      head->prev = newblock;
    head = newblock;
 }
 
@@ -34,8 +36,8 @@ void new_heap_block(heap_block* newblock, int size, int prev_size) {
 // Simple heap implementation: unsorted, doubly-linked list of heap blocks.
 // We use the first fit algorithm, but break up blocks that are too large.
 
-#define roundup_double(size)    (size) = ((size)+7) & (~0x7) 
-// round up to nearest multiple of 8 bytes
+#define roundup(size, mult)    (size) = ((size)+((mult)-1)) & (~((mult)-1) )
+#define roundup_double(size)   roundup(size, 8)
 
 void *my_malloc(size_t size) {
    heap_block* current = head;
@@ -44,16 +46,23 @@ void *my_malloc(size_t size) {
    while (current != NULL && current->size < size)
       current = current->next;
 
-   if (current == NULL) return NULL;
+   if (current == NULL) {
+      // Cheat: use mmap directly if size requested is too large.
+      return mmap(NULL, size, PROT_EXEC|PROT_READ|PROT_WRITE, 
+                         MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+      
+   }
 
    heap_delete(current);
 
+   /*
    int size_used = size + used_hdr_size;
    if (current->size > size_used + (size+free_hdr_size)) {//block too large:break
       heap_block* newblock = ((void *)current) + size_used;
       new_heap_block(newblock, current->size - size_used, size);
       current->size = size;
    }
+   */
 
    current->in_use = 1;
    return (void *)(&current->prev);
@@ -61,7 +70,7 @@ void *my_malloc(size_t size) {
 
 void my_free(void *p) {
    heap_block* current = (heap_block*)(p-used_hdr_size);
-   assert(current->in_use);
+   //assert(current->in_use);
 
    // support merging with the following block, but not with prev block
    heap_block* next = (heap_block*)(p+current->size);
@@ -76,17 +85,17 @@ void my_free(void *p) {
 }
 
 void init_heap(int default_size, int nblocks) {
-   if (default_size < 8)
-      default_size = 8;
-   default_size += free_hdr_size;
+   if (default_size < 8+free_hdr_size)
+      default_size = 8+free_hdr_size;
    roundup_double(default_size);
 
    size_t s = default_size*nblocks;
-   s = (s+8191) & (~((size_t)8192));
+   roundup(s, 4096);
 
    heap_block* hh = mmap(NULL, s, PROT_EXEC|PROT_READ|PROT_WRITE, 
                          MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
    assert(hh != NULL);
+   max_heap_addr = (heap_block*)(((void*)hh)+s);
 
    size_t blksize = s/nblocks;
    for (int i=0; i < nblocks; i++) {
@@ -97,5 +106,5 @@ void init_heap(int default_size, int nblocks) {
 
 __attribute__((constructor))
 static void initheap() {
-   init_heap(LEN1, 256);
+   init_heap(LEN2, 256);
 }
